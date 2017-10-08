@@ -49,18 +49,13 @@ public class MainActivity extends AppCompatActivity {
     private boolean permissionToWriteAccepted = false;
     private String [] permissions = {"android.permission.RECORD_AUDIO", "android.permission.WRITE_EXTERNAL_STORAGE"};
 
-    //   private BroadcastReceiver receiver;
-
-    public TextView textView;
-    private RecyclerView mRecyclerView;
-    private RecyclerView.Adapter mAdapter;
-    private RecyclerView.LayoutManager mLayoutManager;
-    private String[] data = {"A", "B", "C"};
+    private List<Person> persons;
+    private RecyclerView rv;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        setContentView(R.layout.recyclerview_activity);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
@@ -69,9 +64,29 @@ public class MainActivity extends AppCompatActivity {
             requestPermissions(permissions, requestCode);
         }
 
-        //textView = findViewById(R.id.text_view);
+        rv=(RecyclerView)findViewById(R.id.rv);
+
+        LinearLayoutManager llm = new LinearLayoutManager(this);
+        rv.setLayoutManager(llm);
+        rv.setHasFixedSize(true);
+
+        initializeData();
+        initializeAdapter();
 
         startRecording();
+    }
+
+
+    private void initializeData(){
+        persons = new ArrayList<>();
+        persons.add(new Person("Emma Wilson", "23 years old", R.drawable.emma));
+        persons.add(new Person("Lavery Maiss", "25 years old", R.drawable.lavery));
+        persons.add(new Person("Lillie Watts", "35 years old", R.drawable.lillie));
+    }
+
+    private void initializeAdapter(){
+        RVAdapter adapter = new RVAdapter(persons);
+        rv.setAdapter(adapter);
     }
 
     @Override
