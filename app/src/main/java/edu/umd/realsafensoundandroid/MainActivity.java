@@ -1,6 +1,15 @@
 package edu.umd.realsafensoundandroid;
 
+import android.Manifest;
+import android.annotation.SuppressLint;
+import android.app.ActionBar;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
@@ -10,6 +19,8 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.SystemClock;
 import android.support.annotation.NonNull;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -17,12 +28,24 @@ import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
+import android.view.Window;
+
+import com.mikepenz.materialdrawer.Drawer;
+import com.mikepenz.materialdrawer.DrawerBuilder;
+import com.mikepenz.materialdrawer.holder.BadgeStyle;
+import com.mikepenz.materialdrawer.holder.StringHolder;
+import com.mikepenz.materialdrawer.model.DividerDrawerItem;
+import com.mikepenz.materialdrawer.model.PrimaryDrawerItem;
+import com.mikepenz.materialdrawer.model.SecondaryDrawerItem;
+import com.mikepenz.materialdrawer.model.interfaces.IDrawerItem;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -33,7 +56,10 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
+
 
 public class MainActivity extends AppCompatActivity {
 
@@ -42,42 +68,159 @@ public class MainActivity extends AppCompatActivity {
     private Thread recordingThread = null;
     private boolean isRecording = false;
 
-    private int RECORDER_SAMPLERATE = 44100;
+    private int RECORDER_SAMPLERATE = 8000;
     private static final int RECORDER_CHANNELS = AudioFormat.CHANNEL_IN_MONO;
     private static final int RECORDER_AUDIO_ENCODING = AudioFormat.ENCODING_PCM_16BIT;
 
     private boolean permissionToRecordAccepted = false;
     private boolean permissionToWriteAccepted = false;
-    private String [] permissions = {"android.permission.RECORD_AUDIO", "android.permission.WRITE_EXTERNAL_STORAGE"};
+    private String[] permissions = {"android.permission.RECORD_AUDIO", "android.permission.WRITE_EXTERNAL_STORAGE"};
 
-    private List<Notification> persons;
+    int arrays = 0;
+
+    //initialize buffer creation time variable to time just before creation of first buffer
+    long bufferCreationTime;
+
+    List<ArrayList<byte[]>> blockedBuffer;
+    List<Long> time;
+
+    ArrayList<byte[]> byteBuffer;
+    ArrayList<byte[]> byteBufferSecondary;
+
+
+    private List<Notification> notifications;
     private RecyclerView rv;
+
+    public LocationManager locationManager;
+    public static Location location;
+
+    private final LocationListener mLocationListener = new LocationListener() {
+        @Override
+        public void onLocationChanged(final Location location) {
+            MainActivity.location = location;
+        }
+
+        @Override
+        public void onStatusChanged(String s, int i, Bundle bundle) {
+
+        }
+
+        @Override
+        public void onProviderEnabled(String s) {
+
+        }
+
+        @Override
+        public void onProviderDisabled(String s) {
+
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.recyclerview_activity);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
+        //setSupportActionBar(toolbar);
 
-        int requestCode = 200;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            requestPermissions(permissions, requestCode);
+        //getActionBar().show();
+
+        ActionBar actionBar = getActionBar();
+        actionBar.setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+
+        new DrawerBuilder().withActivity(this).build();
+
+        //if you want to update the items at a later time it is recommended to keep it in a variable
+        PrimaryDrawerItem item1 = new PrimaryDrawerItem().withIdentifier(1).withName("Home");
+        SecondaryDrawerItem item2 = new SecondaryDrawerItem().withIdentifier(2).withName("Statistics");
+
+        //startActivity(new Intent(this, LoginActivity.class));
+
+//create the drawer and remember the `Drawer` result object
+        Drawer result = new DrawerBuilder()
+                .withActivity(this)
+                .withToolbar(toolbar)
+                .addDrawerItems(
+                        item1,
+                        new DividerDrawerItem(),
+                        item2,
+                        new SecondaryDrawerItem().withName("Settings")
+                )
+                .withOnDrawerItemClickListener(new Drawer.OnDrawerItemClickListener() {
+                    @Override
+                    public boolean onItemClick(View view, int position, IDrawerItem drawerItem) {
+                        // do something with the clicked item :D
+                        return false;
+                    }
+                })
+                .build();
+
+        //modify an item of the drawer
+        item1.withName("A new name for this drawerItem").withBadge("19").withBadgeStyle(new BadgeStyle().withTextColor(Color.WHITE).withColorRes(R.color.md_red_700));
+//notify the drawer about the updated element. it will take care about everything else
+        result.updateItem(item1);
+
+//to update only the name, badge, icon you can also use one of the quick methods
+        result.updateName(1, new StringHolder("Name"));
+
+//the result object also allows you to add new items, remove items, add footer, sticky footer, ..
+        result.addItem(new DividerDrawerItem());
+        result.addStickyFooterItem(new PrimaryDrawerItem().withName("StickyFooterItem"));
+
+//remove items with an identifier
+        result.removeItem(2);
+
+//open / close the drawer
+        result.openDrawer();
+        result.closeDrawer();
+
+//get the reference to the `DrawerLayout` itself
+        result.getDrawerLayout();
+
+//        // Assume thisActivity is the current activity
+//        for(String s : permissions)
+//        int permissionCheck = ContextCompat.checkSelfPermission(this,
+//                Manifest.permission.WRITE_CALENDAR);
+//
+
+        try {
+            locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+
+            }
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000,
+                    1, mLocationListener);
+            location = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
         }
+        catch(Exception e){
+            e.printStackTrace();
+        }
+//
+            rv = (RecyclerView) findViewById(R.id.rv);
 
-        rv=(RecyclerView)findViewById(R.id.rv);
+            LinearLayoutManager llm = new LinearLayoutManager(this);
+            rv.setLayoutManager(llm);
+            rv.setHasFixedSize(true);
 
-        LinearLayoutManager llm = new LinearLayoutManager(this);
-        rv.setLayoutManager(llm);
-        rv.setHasFixedSize(true);
+            initializeData();
 
-        RetrieveFeedTask json = new RetrieveFeedTask();
-        json.execute();
+            RetrieveFeedTask json = new RetrieveFeedTask();
+            json.execute();
 
-        initializeData();
-        initializeAdapter();
+            while(!json.isCancelled()){
 
-        startRecording();
+            }
+
+            System.out.println("UI PREP");
+            initializeAdapter();
+            System.out.println("UI FINISHED");
+
+//        catch(Exception e){
+//            e.printStackTrace();
+//        }
+
+        //startRecording();
     }
 
     private static JSONObject getJSONObjectFromURL(String urlString) throws IOException, JSONException {
@@ -106,7 +249,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initializeData(){
-        persons = new ArrayList<>();
+        notifications = new ArrayList<>();
+
+        //notifications.add(new Notification("A", "B", "C", "D", 100, 100));
 
         /*
         persons.add(new Notification());
@@ -117,17 +262,17 @@ public class MainActivity extends AppCompatActivity {
         */
     }
 
-    class RetrieveFeedTask extends AsyncTask<Void, Void, Void> {
+    class RetrieveFeedTask extends AsyncTask<Void, Void, Integer> {
 
         private Exception exception;
 
-        protected Void doInBackground(Void... urls) {
+        protected Integer doInBackground(Void... urls) {
             try {
 
                 JSONObject obj = null;
 
                 try {
-                    obj = getJSONObjectFromURL("http://safensound.tech/api/receive");
+                    obj = getJSONObjectFromURL("https://fe37fbf9.ngrok.io/api/v1/receive");
                 } catch (IOException e) {
                     e.printStackTrace();
                 } catch (JSONException e) {
@@ -135,10 +280,81 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 try {
-                    JSONArray array = obj.getJSONArray("GET");
-                    for (int i = 0; i < array.length(); i++)
-                        System.out.println(array.get(i));
-                } catch (JSONException e) {
+
+                    Iterator x = obj.keys();
+                    JSONArray jsonArray = new JSONArray();
+
+                    while (x.hasNext()){
+                        String key = (String) x.next();
+                        jsonArray.put(obj.get(key));
+                    }
+
+                    System.out.println(jsonArray);
+
+                        for (int i = 0; i < jsonArray.length(); i++) {
+                            Notification notification = null;
+                            long id = 0;
+                            String title = "";
+                            String coords[] = new String[3];
+                            String place = "";
+                            String photo = "";
+                            String suggestedAction = "";
+                            long time = 0;
+
+                            //time of request
+                            if (i == 0) {
+                                id = (long) jsonArray.get(i);
+                                System.out.println(id);
+                            }
+                            else {
+                                JSONArray event = (JSONArray) jsonArray.get(i);
+                                System.out.println("EVENT: " + event);
+                                System.out.println(event.length());
+                                for(int j = 0; j < 6; j++) {
+                                    //title
+                                    if(j == 0) {
+                                        System.out.println(event.get(j));
+                                        title = (String) event.getJSONObject(j).getString("title");
+                                    }
+                                    //location
+                                    if(j == 1) {
+                                        JSONObject location = event.getJSONObject(0).getJSONObject("location");
+                                        System.out.println("LO" + location);
+                                        for(int l = 0; l < location.length(); l++) {
+                                            if(l == 0)
+                                                coords[0] = location.getDouble("lat") + " ";
+                                            if(l == 1)
+                                                coords[1] = location.getDouble("lng") + " ";
+                                            if(l == 2)
+                                                coords[2] = location.getDouble("elev") + " ";
+                                        }
+                                    }
+                                    if(j == 2) {
+                                        place = (String) event.getJSONObject(0).getString("place");
+                                    }
+                                    if(j == 3) {
+                                        photo = (String) event.getJSONObject(0).getString("photo");
+                                    }
+                                    if(j == 4) {
+                                        suggestedAction = (String) event.getJSONObject(0).getString("suggested_action");
+                                    }
+                                    if(j == 5) {
+                                        time = Long.parseLong((String) event.getJSONObject(0).getString("time"));
+                                    }
+                                }
+                            }
+
+                            System.out.println(id + " " + title + " " + coords + " " + place + " " + photo + " " + suggestedAction + " " + time);
+
+                            notification = new Notification(title, coords, place, photo, id, time);
+
+                            if(title != "" && place != null && photo != null && time != 0) {
+                                notifications.add(notification);
+                                System.out.println("ADDED");
+                            }
+                        }
+
+                } catch (Exception e) {
                     e.printStackTrace();
                 }
 
@@ -148,18 +364,28 @@ public class MainActivity extends AppCompatActivity {
                 return null;
             }
 
-            return null;
+            cancel(true);
+
+            return 1;
         }
 
-        protected void onPostExecute(Void... fields) {
+        protected void onPostExecute(Integer... fields) {
             // TODO: check this.exception
             // TODO: do something with the feed
+            System.out.println("ESCAPIST");
         }
     }
 
     private void initializeAdapter(){
-        RVAdapter adapter = new RVAdapter(persons);
-        rv.setAdapter(adapter);
+        RVAdapter adapter = new RVAdapter(notifications);
+        System.out.println("ADAPTER");
+        try {
+            rv.setAdapter(adapter);
+        }
+        catch(Exception e){
+            e.printStackTrace();
+        }
+        System.out.println("FINISH");
     }
 
     @Override
@@ -208,19 +434,18 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        audioRecord = getAudioRecord();
+        audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC, RECORDER_SAMPLERATE, RECORDER_CHANNELS, RECORDER_AUDIO_ENCODING, 2048);
         Log.d("TAG", "" + audioRecord);
 
-        //audioRecord.startRecording();
+        audioRecord.startRecording();
         isRecording = true;
-        /*
+
         recordingThread = new Thread(new Runnable() {
             public void run() {
                 writeAudioDataToFile();
             }
         }, "AudioRecorder Thread");
         recordingThread.start();
-        */
     }
 
 
@@ -235,6 +460,61 @@ public class MainActivity extends AppCompatActivity {
             sData[i] = 0;
         }
         return bytes;
+    }
+
+
+    public void sendPost(final long time, final Byte[] adjacentWaveform, final int index, final double lat, final double lng, final double ele) {
+        Thread thread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    URL url = new URL("https://fe37fbf9.ngrok.io/api/v1/send");
+                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestMethod("POST");
+                    conn.setRequestProperty("Content-Type", "application/json;charset=UTF-8");
+                    conn.setRequestProperty("Accept","application/json");
+                    conn.setDoOutput(true);
+                    conn.setDoInput(true);
+
+                    JSONObject jsonParam = new JSONObject();
+                    jsonParam.put("time", time);
+                    //jsonParam.put("surrounding_waveform", adjacentWaveform);
+                    //jsonParam.put("index_of_loudest", index);
+                    jsonParam.put("latitude", lat);
+                    jsonParam.put("longitude", lng);
+                    jsonParam.put("elevation", ele);
+
+
+                    Log.i("JSON", jsonParam.toString());
+                    DataOutputStream os = new DataOutputStream(conn.getOutputStream());
+                    //os.writeBytes(URLEncoder.encode(jsonParam.toString(), "UTF-8"));
+                    os.writeBytes(jsonParam.toString());
+
+                    os.flush();
+                    os.close();
+
+                    Log.i("STATUS", String.valueOf(conn.getResponseCode()));
+                    Log.i("MSG" , conn.getResponseMessage());
+
+                    conn.disconnect();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+
+        thread.start();
+    }
+
+    private double calculateAverage(List <Integer> marks) {
+        Integer sum = 0;
+        if(!marks.isEmpty()) {
+            for (Integer mark : marks) {
+                sum += mark;
+            }
+            return sum.doubleValue() / marks.size();
+        }
+        return sum;
     }
 
     private void writeAudioDataToFile() {
@@ -258,42 +538,84 @@ public class MainActivity extends AppCompatActivity {
         final long BUFFER_SIZE = 2000; //in millis
         final long BLOCK_SIZE = 50; //in millis
         final long BLOCKS_PER_BUFFER = BUFFER_SIZE / BLOCK_SIZE;
-        int arrays = 0;
+        arrays = 0;
         //initialize buffer creation time variable to time just before creation of first buffer
         long bufferCreationTime = time();
 
-        List<ArrayList<byte[]>> blockedBuffer = new ArrayList<ArrayList<byte[]>>();
+        blockedBuffer = new ArrayList<ArrayList<byte[]>>();
         for(int i = 0; i < BLOCKS_PER_BUFFER; i++)
             blockedBuffer.add(i, new ArrayList<byte[]>());
 
-        List<Long> time = new ArrayList<Long>();
+        time = new ArrayList<Long>();
 
-        ArrayList<byte[]> byteBuffer = new ArrayList<byte[]>();
-        ArrayList<byte[]> byteBufferSecondary = new ArrayList<byte[]>();
+        byteBuffer = new ArrayList<byte[]>();
+        byteBufferSecondary = new ArrayList<byte[]>();
 
         while (isRecording) {
             // gets the voice output from microphone to byte format
 
             //TODO: absolute value averages of block data
 
-            final int BYTE_ARRAY_SIZE = 1024000000;
+            final int BYTE_ARRAY_SIZE = 1024;
+            final int BUFFER_STACK = 50;
             final int TIME_BYTE_ARRAY_SIZE = 8;
 
             //read the next short array of audio data
             audioRecord.read(sData, 0, BufferElements2Rec);
-            System.out.println("Short writing to file" + " " + elapsed + " " + Arrays.toString(sData));
             System.out.println("" + elapsed + " " + " " + BUFFER_SIZE);
             try {
                 // // writes the data to file from buffer
                 // // stores the voice buffer
                 final byte bData[] = short2byte(sData);
                 //os.write(bData, 0, BufferElements2Rec * BytesPerElement);
+                System.out.println("Byte writing to file" + " " + elapsed + " " + Arrays.toString(bData));
                 byteBuffer.add(bData);
                 arrays++;
                 time.add(time());
-
                 elapsed = time() - startTime;
 
+                if(arrays > BUFFER_STACK){
+                    Thread thread = new Thread() {
+                        @Override
+                        public void run(){
+                            List<Byte> unifiedBuffer = new ArrayList<Byte>();
+
+                            List<Integer> averages = new ArrayList<>();
+                            int localAverage;
+
+                            for(int i = 0; i < byteBuffer.size(); i++){
+                                localAverage = 0;
+                                for(int j = 0; j < byteBuffer.get(i).length; j++){
+                                    localAverage += Math.abs(byteBuffer.get(i)[j] & 0xFF);
+                                }
+                                localAverage /= byteBuffer.get(0).length;
+                                averages.add(localAverage);
+                            }
+
+                            @SuppressLint("MissingPermission") Location position = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+                            double latitude = position.getLatitude();
+                            double longitude = position.getLongitude();
+                            double elevation = position.getAltitude();
+
+                            int maxAverage = Collections.max(averages);
+                            double meanAverage = calculateAverage(averages);
+                            int maxIndex = averages.indexOf(maxAverage);
+                            System.out.println("MAX: " + maxAverage + " " + time.get(maxIndex) + " " + meanAverage);
+
+                            if(maxAverage > 1000){
+
+                                sendPost(time.get(maxIndex), byteBuffer.toArray(new Byte[byteBuffer.size()]), maxIndex, latitude, longitude, elevation);
+                            }
+
+                            byteBuffer = new ArrayList<byte[]>();
+
+                            arrays %= BUFFER_STACK;
+                        }
+                    };
+                    thread.start();
+                }
+
+                /*
                 if(elapsed > BUFFER_SIZE) {
 
                     System.out.println(time);
@@ -306,7 +628,6 @@ public class MainActivity extends AppCompatActivity {
                     System.out.println("TAG" + blockedBuffer);
                 }
 
-                    /*
                     int k = 0;
 
                     while(k < byteBuffer.size()) {
@@ -363,7 +684,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 */
 
-                byteBufferSecondary = byteBuffer;
+                //byteBufferSecondary = byteBuffer;
                 //byteBuffer = new ArrayList<byte[]>();
 
                 //set new buffer creation time
