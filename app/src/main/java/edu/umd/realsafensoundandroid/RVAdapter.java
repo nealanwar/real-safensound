@@ -28,9 +28,9 @@ public class RVAdapter extends RecyclerView.Adapter<RVAdapter.PersonViewHolder> 
         }
     }
 
-    List<Person> persons;
+    List<Notification> persons;
 
-    RVAdapter(List<Person> persons){
+    RVAdapter(List<Notification> persons){
         this.persons = persons;
     }
 
@@ -49,7 +49,7 @@ public class RVAdapter extends RecyclerView.Adapter<RVAdapter.PersonViewHolder> 
     @Override
     public void onBindViewHolder(PersonViewHolder personViewHolder, int i) {
         personViewHolder.personName.setText(persons.get(i).name);
-        personViewHolder.personAge.setText(persons.get(i).age);
+        personViewHolder.personAge.setText(persons.get(i).location);
         personViewHolder.personPhoto.setImageResource(persons.get(i).photoId);
     }
 

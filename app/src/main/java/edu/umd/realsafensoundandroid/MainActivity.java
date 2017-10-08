@@ -1,38 +1,39 @@
 package edu.umd.realsafensoundandroid;
 
-import android.content.BroadcastReceiver;
 import android.content.pm.PackageManager;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.SystemClock;
 import android.support.annotation.NonNull;
-import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
-import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.widget.TextView;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import edu.umd.realsafensoundandroid.R;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -49,7 +50,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean permissionToWriteAccepted = false;
     private String [] permissions = {"android.permission.RECORD_AUDIO", "android.permission.WRITE_EXTERNAL_STORAGE"};
 
-    private List<Person> persons;
+    private List<Notification> persons;
     private RecyclerView rv;
 
     @Override
@@ -70,18 +71,90 @@ public class MainActivity extends AppCompatActivity {
         rv.setLayoutManager(llm);
         rv.setHasFixedSize(true);
 
+        RetrieveFeedTask json = new RetrieveFeedTask();
+        json.execute();
+
         initializeData();
         initializeAdapter();
 
         startRecording();
     }
 
+    private static JSONObject getJSONObjectFromURL(String urlString) throws IOException, JSONException {
+        HttpURLConnection urlConnection = null;
+        URL url = new URL(urlString);
+        urlConnection = (HttpURLConnection) url.openConnection();
+        urlConnection.setRequestMethod("GET");
+        urlConnection.setReadTimeout(10000 /* milliseconds */ );
+        urlConnection.setConnectTimeout(15000 /* milliseconds */ );
+        urlConnection.setDoOutput(true);
+        urlConnection.connect();
+
+        BufferedReader br = new BufferedReader(new InputStreamReader(url.openStream()));
+        StringBuilder sb = new StringBuilder();
+
+        String line;
+        while ((line = br.readLine()) != null) {
+            sb.append(line + "\n");
+        }
+        br.close();
+
+        String jsonString = sb.toString();
+        System.out.println("JSON: " + jsonString);
+
+        return new JSONObject(jsonString);
+    }
 
     private void initializeData(){
         persons = new ArrayList<>();
-        persons.add(new Person("Emma Wilson", "23 years old", R.drawable.emma));
-        persons.add(new Person("Lavery Maiss", "25 years old", R.drawable.lavery));
-        persons.add(new Person("Lillie Watts", "35 years old", R.drawable.lillie));
+
+        /*
+        persons.add(new Notification());
+
+        persons.add(new Notification("Emma Wilson", "23 years old", R.drawable.emma));
+        persons.add(new Notification("Lavery Maiss", "25 years old", R.drawable.lavery));
+        persons.add(new Notification("Lillie Watts", "35 years old", R.drawable.lillie));
+        */
+    }
+
+    class RetrieveFeedTask extends AsyncTask<Void, Void, Void> {
+
+        private Exception exception;
+
+        protected Void doInBackground(Void... urls) {
+            try {
+
+                JSONObject obj = null;
+
+                try {
+                    obj = getJSONObjectFromURL("http://safensound.tech/api/receive");
+                } catch (IOException e) {
+                    e.printStackTrace();
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+
+                try {
+                    JSONArray array = obj.getJSONArray("GET");
+                    for (int i = 0; i < array.length(); i++)
+                        System.out.println(array.get(i));
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+
+            } catch (Exception e) {
+                this.exception = e;
+
+                return null;
+            }
+
+            return null;
+        }
+
+        protected void onPostExecute(Void... fields) {
+            // TODO: check this.exception
+            // TODO: do something with the feed
+        }
     }
 
     private void initializeAdapter(){
